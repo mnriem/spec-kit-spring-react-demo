@@ -155,3 +155,5 @@ The number of passes will vary per project depending on scope and complexity.
 ## Result
 
 The fully implemented LLM Performance Analytics Platform — a Spring Boot REST API with an embedded React dashboard, PostgreSQL persistence, Docker Compose deployment, and sample data — built from a one-sentence description in two implementation passes.
+
+![Dashboard Screenshot](screenshot.png)
