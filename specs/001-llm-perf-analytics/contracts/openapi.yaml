@@ -1,0 +1,1145 @@
+openapi: 3.0.3
+
+info:
+  title: LLM Performance Analytics Platform API
+  description: |
+    REST API for ingesting, querying, and managing LLM interaction performance records.
+    All `/api/**` endpoints require the `X-API-Key` header. The SPA frontend is served
+    from the root path and is not part of this contract.
+  version: 1.0.0
+  contact:
+    name: Platform Team
+
+servers:
+  - url: http://localhost:8080
+    description: Local development (Spring Boot embedded)
+  - url: http://localhost:8080
+    description: Docker Compose (app container)
+
+security:
+  - ApiKeyAuth: []
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    # ── Envelope ────────────────────────────────────────────────────────────────
+    SuccessEnvelope:
+      type: object
+      required: [data, timestamp]
+      properties:
+        data:
+          description: The response payload (object or array)
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-03-02T10:00:00Z"
+
+    ErrorEnvelope:
+      type: object
+      required: [error, message, timestamp]
+      properties:
+        error:
+          type: string
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          example: "Request validation failed"
+        fieldErrors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+        timestamp:
+          type: string
+          format: date-time
+
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          example: "tokens_in"
+        message:
+          type: string
+          example: "must be greater than or equal to 0"
+
+    # ── Project ─────────────────────────────────────────────────────────────────
+    ProjectResponse:
+      type: object
+      required: [id, name, description, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Customer Support Bot Evaluation"
+        description:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        experiment_count:
+          type: integer
+          description: Total number of experiments in this project
+        interaction_count:
+          type: integer
+          description: Total number of interactions across all experiments
+
+    CreateProjectRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: "Customer Support Bot Evaluation"
+        description:
+          type: string
+          nullable: true
+
+    # ── Experiment ───────────────────────────────────────────────────────────────
+    ExperimentResponse:
+      type: object
+      required: [id, project_id, name, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "GPT-4o Baseline Tests"
+        description:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        iteration_count:
+          type: integer
+
+    # ── Iteration ────────────────────────────────────────────────────────────────
+    IterationResponse:
+      type: object
+      required: [id, experiment_id, name, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        experiment_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "gpt-4o-with-tools"
+        description:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        interaction_count:
+          type: integer
+
+    # ── ToolCall ─────────────────────────────────────────────────────────────────
+    ToolCallRequest:
+      type: object
+      required: [tool_name]
+      properties:
+        tool_name:
+          type: string
+          minLength: 1
+          example: "search_knowledge_base"
+        input_arguments:
+          type: object
+          additionalProperties: true
+          nullable: true
+          example: { "query": "refund policy" }
+        output:
+          type: object
+          additionalProperties: true
+          nullable: true
+          example: { "results": ["Policy A", "Policy B"] }
+        called_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    ToolCallResponse:
+      type: object
+      required: [id, tool_name, sequence_order]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tool_name:
+          type: string
+        input_arguments:
+          type: object
+          additionalProperties: true
+          nullable: true
+        output:
+          type: object
+          additionalProperties: true
+          nullable: true
+        sequence_order:
+          type: integer
+        called_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    # ── Interaction ──────────────────────────────────────────────────────────────
+    CreateInteractionRequest:
+      type: object
+      required: [project_name, experiment_name, iteration_name, model, tokens_in, tokens_out, started_at, ended_at]
+      properties:
+        project_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Auto-creates the project if it does not exist
+          example: "Customer Support Bot Evaluation"
+        project_description:
+          type: string
+          nullable: true
+          description: Used only when auto-creating a new project
+        experiment_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Auto-creates the experiment within the project if it does not exist
+          example: "GPT-4o Baseline Tests"
+        iteration_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Auto-creates the iteration within the experiment if it does not exist
+          example: "gpt-4o-with-tools"
+        model:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "gpt-4o"
+        prompt:
+          type: string
+          nullable: true
+          description: Full prompt text. Stored gzip-compressed in the database; returned as plain text.
+          example: "You are a helpful customer support agent..."
+        response_metadata:
+          type: object
+          additionalProperties: true
+          nullable: true
+          description: Arbitrary response metadata; only metadata is captured, not full response text.
+          example: { "finish_reason": "stop", "model": "gpt-4o-2024-08-06" }
+        tokens_in:
+          type: integer
+          minimum: 0
+          example: 1024
+        tokens_out:
+          type: integer
+          minimum: 0
+          description: 0 is valid for interrupted or error calls
+          example: 512
+        started_at:
+          type: string
+          format: date-time
+          example: "2026-03-02T09:00:00.000Z"
+        ended_at:
+          type: string
+          format: date-time
+          description: Must be >= started_at
+          example: "2026-03-02T09:00:01.234Z"
+        tools_called:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolCallRequest'
+          nullable: true
+          description: Empty array and absent field are both treated as "no tools called"
+
+    InteractionSummaryResponse:
+      description: Lightweight projection used in list views — does not include prompt text
+      type: object
+      required: [id, iteration_id, model, tokens_in, tokens_out, total_tokens, latency_ms, started_at, ended_at, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        iteration_id:
+          type: string
+          format: uuid
+        iteration_name:
+          type: string
+        experiment_id:
+          type: string
+          format: uuid
+        experiment_name:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        project_name:
+          type: string
+        model:
+          type: string
+        tokens_in:
+          type: integer
+        tokens_out:
+          type: integer
+        total_tokens:
+          type: integer
+        latency_ms:
+          type: integer
+          format: int64
+        tokens_per_second:
+          type: number
+          format: double
+          nullable: true
+        estimated_cost:
+          type: number
+          format: double
+          nullable: true
+        tool_call_count:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    InteractionDetailResponse:
+      description: Full interaction record including decompressed prompt and tool call log
+      allOf:
+        - $ref: '#/components/schemas/InteractionSummaryResponse'
+        - type: object
+          properties:
+            prompt:
+              type: string
+              nullable: true
+              description: Decompressed full prompt text
+            response_metadata:
+              type: object
+              additionalProperties: true
+              nullable: true
+            tool_calls:
+              type: array
+              items:
+                $ref: '#/components/schemas/ToolCallResponse'
+
+    # ── Dashboard ────────────────────────────────────────────────────────────────
+    DashboardSummaryResponse:
+      type: object
+      required: [total_interactions, avg_latency_ms, total_tokens, total_estimated_cost, from, to]
+      properties:
+        total_interactions:
+          type: integer
+        avg_latency_ms:
+          type: number
+          format: double
+          nullable: true
+        total_tokens:
+          type: integer
+          format: int64
+        total_estimated_cost:
+          type: number
+          format: double
+          nullable: true
+          description: Sum of non-null estimated_cost values; null if no pricing data available
+        from:
+          type: string
+          format: date-time
+          description: Start of the query window
+        to:
+          type: string
+          format: date-time
+          description: End of the query window
+
+    # ── Comparison ───────────────────────────────────────────────────────────────
+    IterationMetrics:
+      type: object
+      required: [iteration_id, iteration_name, interaction_count]
+      properties:
+        iteration_id:
+          type: string
+          format: uuid
+        iteration_name:
+          type: string
+        experiment_id:
+          type: string
+          format: uuid
+        interaction_count:
+          type: integer
+        avg_latency_ms:
+          type: number
+          format: double
+          nullable: true
+        avg_tokens_in:
+          type: number
+          format: double
+          nullable: true
+        avg_tokens_out:
+          type: number
+          format: double
+          nullable: true
+        avg_total_tokens:
+          type: number
+          format: double
+          nullable: true
+        tool_call_rate:
+          type: number
+          format: double
+          nullable: true
+          description: Average number of tool calls per interaction
+        avg_estimated_cost:
+          type: number
+          format: double
+          nullable: true
+
+    # ── Pagination ───────────────────────────────────────────────────────────────
+    PagedResponse:
+      type: object
+      required: [data, page, page_size, total_elements, total_pages, timestamp]
+      properties:
+        data:
+          type: array
+          items: {}
+        page:
+          type: integer
+          minimum: 0
+        page_size:
+          type: integer
+          minimum: 1
+        total_elements:
+          type: integer
+          format: int64
+        total_pages:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+
+    # ── Sample Data ───────────────────────────────────────────────────────────────
+    SampleDataResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        projects_created:
+          type: integer
+        experiments_created:
+          type: integer
+        iterations_created:
+          type: integer
+        interactions_created:
+          type: integer
+
+paths:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Projects
+  # ════════════════════════════════════════════════════════════════════════════
+
+  /api/projects:
+    get:
+      summary: List all projects
+      operationId: listProjects
+      tags: [Projects]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 0, minimum: 0 }
+        - name: size
+          in: query
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+      responses:
+        '200':
+          description: Paginated list of projects
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PagedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ProjectResponse'
+        '401':
+          description: Invalid or missing API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+    post:
+      summary: Create a new project
+      operationId: createProject
+      tags: [Projects]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ProjectResponse'
+        '409':
+          description: Project name already exists (case-insensitive)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/projects/{projectId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      summary: Get a project by ID
+      operationId: getProject
+      tags: [Projects]
+      responses:
+        '200':
+          description: Project detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ProjectResponse'
+        '404':
+          description: Project not found
+
+    delete:
+      summary: Delete a project and all its data (cascade)
+      operationId: deleteProject
+      tags: [Projects]
+      responses:
+        '204':
+          description: Deleted successfully
+        '404':
+          description: Project not found
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Experiments
+  # ════════════════════════════════════════════════════════════════════════════
+
+  /api/projects/{projectId}/experiments:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      summary: List experiments within a project
+      operationId: listExperiments
+      tags: [Experiments]
+      responses:
+        '200':
+          description: List of experiments
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ExperimentResponse'
+        '404':
+          description: Project not found
+
+  /api/experiments/{experimentId}:
+    parameters:
+      - name: experimentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    delete:
+      summary: Delete an experiment and all its iterations + interactions
+      operationId: deleteExperiment
+      tags: [Experiments]
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Experiment not found
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Iterations
+  # ════════════════════════════════════════════════════════════════════════════
+
+  /api/experiments/{experimentId}/iterations:
+    parameters:
+      - name: experimentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      summary: List iterations within an experiment
+      operationId: listIterations
+      tags: [Iterations]
+      responses:
+        '200':
+          description: List of iterations
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/IterationResponse'
+        '404':
+          description: Experiment not found
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Interactions
+  # ════════════════════════════════════════════════════════════════════════════
+
+  /api/interactions:
+    post:
+      summary: Ingest a new LLM interaction record
+      description: |
+        Auto-creates the project, experiment, and iteration hierarchy if they do not exist.
+        Derived metrics (latency_ms, total_tokens, tokens_per_second, estimated_cost) are
+        calculated and stored by the server.
+      operationId: createInteraction
+      tags: [Interactions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInteractionRequest'
+      responses:
+        '201':
+          description: Interaction ingested and stored
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/InteractionDetailResponse'
+        '401':
+          description: Invalid or missing API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Validation error (missing required fields, ended_at < started_at, negative tokens)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+    get:
+      summary: List interactions with filtering and pagination
+      operationId: listInteractions
+      tags: [Interactions]
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: experimentId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: iterationId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: model
+          in: query
+          schema:
+            type: string
+          description: Exact model identifier filter
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter interactions with started_at >= from (default: now minus 30 days)
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter interactions with started_at <= to (default: now)
+        - name: minLatencyMs
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: maxLatencyMs
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: page
+          in: query
+          schema: { type: integer, default: 0, minimum: 0 }
+        - name: size
+          in: query
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+        - name: sort
+          in: query
+          schema:
+            type: string
+            default: started_at,desc
+            description: "Field and direction e.g. latency_ms,desc or started_at,asc"
+      responses:
+        '200':
+          description: Paginated list of interaction summaries (no prompt text)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PagedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/InteractionSummaryResponse'
+
+  /api/interactions/{interactionId}:
+    parameters:
+      - name: interactionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      summary: Get full interaction detail including prompt text and tool call log
+      operationId: getInteraction
+      tags: [Interactions]
+      responses:
+        '200':
+          description: Full interaction including decompressed prompt and tool calls
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/InteractionDetailResponse'
+        '404':
+          description: Interaction not found
+
+    delete:
+      summary: Delete a single interaction
+      operationId: deleteInteraction
+      tags: [Interactions]
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Interaction not found
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Dashboard
+  # ════════════════════════════════════════════════════════════════════════════
+
+  /api/dashboard/summary:
+    get:
+      summary: Dashboard summary metrics — total interactions, avg latency, total tokens, estimated cost
+      description: |
+        Defaults to the last 30 days. Scoped to the selected project if projectId is provided.
+        All metric cards and charts on the dashboard update to the selected from/to window.
+      operationId: getDashboardSummary
+      tags: [Dashboard]
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Scope to a specific project; if omitted, returns aggregate across all projects
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Start of time window (default = now - 30 days)
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: End of time window (default = now)
+      responses:
+        '200':
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DashboardSummaryResponse'
+
+  /api/dashboard/timeline:
+    get:
+      summary: Interaction volume over time (for timeline chart)
+      operationId: getDashboardTimeline
+      tags: [Dashboard]
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: granularity
+          in: query
+          schema:
+            type: string
+            enum: [hour, day, week]
+            default: day
+      responses:
+        '200':
+          description: Time series data points
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          required: [bucket, count]
+                          properties:
+                            bucket:
+                              type: string
+                              format: date-time
+                            count:
+                              type: integer
+
+  /api/dashboard/tokens-by-model:
+    get:
+      summary: Total token usage grouped by model (for token usage chart)
+      operationId: getTokensByModel
+      tags: [Dashboard]
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Token breakdown per model
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          required: [model, total_tokens_in, total_tokens_out]
+                          properties:
+                            model:
+                              type: string
+                            total_tokens_in:
+                              type: integer
+                              format: int64
+                            total_tokens_out:
+                              type: integer
+                              format: int64
+
+  /api/dashboard/latency-distribution:
+    get:
+      summary: Latency distribution data (for histogram / box plot)
+      operationId: getLatencyDistribution
+      tags: [Dashboard]
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: buckets
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 5
+            maximum: 100
+      responses:
+        '200':
+          description: Histogram buckets for latency distribution
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          required: [bucket_start_ms, bucket_end_ms, count]
+                          properties:
+                            bucket_start_ms:
+                              type: integer
+                              format: int64
+                            bucket_end_ms:
+                              type: integer
+                              format: int64
+                            count:
+                              type: integer
+
+  /api/dashboard/tool-usage:
+    get:
+      summary: Tool call frequency — most-used tools
+      operationId: getToolUsageFrequency
+      tags: [Dashboard]
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 50
+      responses:
+        '200':
+          description: Tool call frequency ranked list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          required: [tool_name, call_count]
+                          properties:
+                            tool_name:
+                              type: string
+                            call_count:
+                              type: integer
+                              format: int64
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Iteration Comparison
+  # ════════════════════════════════════════════════════════════════════════════
+
+  /api/comparison:
+    get:
+      summary: Get normalised metrics for 2 or more iterations side-by-side
+      operationId: compareIterations
+      tags: [Comparison]
+      parameters:
+        - name: iterationIds
+          in: query
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+              format: uuid
+            minItems: 2
+          description: At least 2 iteration UUIDs to compare
+      responses:
+        '200':
+          description: Normalised metrics per iteration
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/IterationMetrics'
+        '400':
+          description: Fewer than 2 iteration IDs provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: One or more iteration IDs not found
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Admin / Sample Data
+  # ════════════════════════════════════════════════════════════════════════════
+
+  /api/admin/sample-data:
+    post:
+      summary: Load the pre-built sample dataset
+      description: |
+        Seeds 3 projects, 3+ experiments, 6+ iterations, and 50+ interactions with
+        varied models and tool call patterns. Idempotent: returns 409 if sample data
+        already exists unless clearFirst=true is passed.
+      operationId: loadSampleData
+      tags: [Admin]
+      parameters:
+        - name: clearFirst
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: If true, deletes existing sample data before re-seeding
+      responses:
+        '201':
+          description: Sample data loaded
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SampleDataResponse'
+        '409':
+          description: Sample data already exists; use clearFirst=true to replace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+tags:
+  - name: Projects
+    description: Top-level project management
+  - name: Experiments
+    description: Experiment grouping within projects
+  - name: Iterations
+    description: Configuration variants within experiments
+  - name: Interactions
+    description: LLM interaction records — the core data entity
+  - name: Dashboard
+    description: Aggregated metrics and chart data for the analytics dashboard
+  - name: Comparison
+    description: Side-by-side iteration performance comparison
+  - name: Admin
+    description: Administrative operations including sample data management

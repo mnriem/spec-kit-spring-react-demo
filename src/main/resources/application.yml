@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: llm-analytics
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/llmanalytics
+    username: llmanalytics
+    password: changeme
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          lob:
+            non_contextual_creation: true
+    show-sql: false
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+app:
+  security:
+    api-key: dev-key-change-in-production
+
+logging:
+  level:
+    com.llmanalytics: INFO
+    org.springframework.security: WARN

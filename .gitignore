@@ -1,0 +1,74 @@
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+.mvn/wrapper/maven-wrapper.jar
+hs_err_pid*
+
+# Spring Boot / IDE
+*.iml
+*.ipr
+*.iws
+.idea/
+.classpath
+.project
+.settings/
+*.suo
+*.user
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Node.js / Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Build output
+dist/
+build/
+out/
+
+# Environment & secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+frontend/.env
+frontend/.env.local
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V9
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# Docker
+.dockerignore
+
+# Misc temp files
+*.tmp
+*.swp
+*.bak
+frontend/node/

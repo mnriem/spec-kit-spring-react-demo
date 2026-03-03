@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:db}:${POSTGRES_PORT:5432}/${POSTGRES_DB:llmanalytics}
+    username: ${POSTGRES_USER:llmanalytics}
+    password: ${POSTGRES_PASSWORD:changeme}
+
+app:
+  security:
+    api-key: ${APP_API_KEY}
+
+logging:
+  level:
+    com.llmanalytics: INFO
